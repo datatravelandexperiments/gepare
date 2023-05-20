@@ -1,0 +1,12 @@
+syntax:glob
+
+*.egg-info
+*.py[co]
+.coverage
+.git/
+.mypy_cache/
+.pytest_cache/
+.venv/
+__pycache__/
+dist/
+htmlcov/

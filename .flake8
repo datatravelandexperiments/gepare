@@ -1,0 +1,16 @@
+[flake8]
+ignore =
+    # whitespace before ':' in slice
+    E203,
+    # multiple spaces after ','
+    E241,
+    # expected 2 blank lines, found 1
+    E302,
+    # expected 2 blank lines after class or function definition, found 1
+    E305,
+    # line break before binary operator
+    W503,
+    # line break after binary operator
+    W504
+
+max-line-length = 80

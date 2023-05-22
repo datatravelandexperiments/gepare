@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: MIT
+"""Test Mercurial origin."""
+
+import subprocess
 
 from pathlib import Path
 
-import gepare
 import testutil
 
-import subprocess
+import gepare
 
 def test_boostrap(capsys):
     local = '/usr/local/src/test'

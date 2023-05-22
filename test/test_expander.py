@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+"""Test Expander."""
 
 from gepare import Expander
 

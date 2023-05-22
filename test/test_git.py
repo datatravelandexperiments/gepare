@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: MIT
+"""Test git origin."""
+
+import subprocess
 
 from pathlib import Path
 
-import gepare
 import testutil
 
-import subprocess
+import gepare
 
 def test_boostrap(capsys):
     local = '/usr/local/src/test'
@@ -54,4 +56,4 @@ def test_status(monkeypatch):
 
     g = gepare.GitOrigin('test', remote, Path(local))
     assert g.status() == gepare.OriginStatus.UNKNOWN
-    assert runs[0].args == ['git', 'status', '--short']
+    assert runs[0].args == ['git', 'status', '--porcelain=2']

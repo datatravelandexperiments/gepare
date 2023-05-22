@@ -1,14 +1,16 @@
 # SPDX-License-Identifier: MIT
+"""Test TOML utilities."""
 
-import builtins
 import io
+import pathlib
+
+import testutil
 
 from gepare import read_toml, toml_escape
-import testutil
 
 def test_read_toml_file(monkeypatch):
     monkeypatch.setattr(
-        builtins, 'open',
+        pathlib.Path, 'open',
         testutil.fake_mapped({'file': io.BytesIO(b'key = "value"')}))
     r = read_toml(['file'])
     assert r == {'key': 'value'}

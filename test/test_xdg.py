@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+"""Test XDG utilties."""
 
 from pathlib import Path
 

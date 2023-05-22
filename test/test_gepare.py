@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
+"""Test gepare."""
 
-import builtins
 import io
 import json
 
@@ -16,7 +16,7 @@ XDG_DATA_HOME = '/home/test/.local/share'
 XDG_STATE_HOME = '/home/test/.local/state'
 XDG_CACHE_HOME = '/home/test/.cache'
 
-@pytest.fixture(scope="function", name="setup")
+@pytest.fixture(name='setup')
 def _setup(monkeypatch):
     monkeypatch.setenv('XDG_CONFIG_HOME', XDG_CONFIG_HOME)
     monkeypatch.setenv('XDG_DATA_HOME', XDG_DATA_HOME)
@@ -143,9 +143,9 @@ def test_build_output(setup):
                 'dst': dst,
                 'vcs': 'git',
                 'pv': 3,
-                'pz': '44'
-            }
-        }
+                'pz': '44',
+            },
+        },
     }
 
 TOML1 = b"""
@@ -217,21 +217,21 @@ def test_build_list(setup):
 
 def test_gepa_load(setup, monkeypatch):
     fake_open, opened = testutil.make_mapped({'test.toml': io.BytesIO(TOML1)})
-    monkeypatch.setattr(builtins, 'open', fake_open)
+    monkeypatch.setattr(Path, 'open', fake_open)
     r = gepare.main(['gepare', 'test.toml'])
     assert opened == ['test.toml']
     assert r == 0
 
 def test_gepa_load_type_error(setup, monkeypatch):
     monkeypatch.setattr(
-        builtins, 'open',
+        Path, 'open',
         testutil.fake_mapped(
             {'test.toml': io.BytesIO(b'[package.a]\nload = 1\n')}))
     with pytest.raises(TypeError):
         _ = gepare.main(['gepare', 'test.toml'])
 
 def test_gepa_define(setup, monkeypatch, capsys):
-    monkeypatch.setattr(builtins, 'open',
+    monkeypatch.setattr(Path, 'open',
                         testutil.fake_mapped({'test.toml': io.BytesIO(TOML1)}))
     r = gepare.main(['gepare', '-j', '-D', 'global.gv', 'three', 'test.toml'])
     assert r == 0
@@ -240,22 +240,22 @@ def test_gepa_define(setup, monkeypatch, capsys):
     assert j['gv'] == 'three'
 
 def test_gepa_package(setup, monkeypatch, capsys):
-    monkeypatch.setattr(builtins, 'open',
+    monkeypatch.setattr(Path, 'open',
                         testutil.fake_mapped({'test.toml': io.BytesIO(TOML1)}))
     r = gepare.main(['gepare', '-j', '-p', 'a', '-p', 'd', 'test.toml'])
     assert r == 0
     j = json.loads(capsys.readouterr().out)
-    assert set(j['package'].keys()) == set(('a', 'd'))
+    assert set(j['package'].keys()) == {'a', 'd'}
 
 def test_gepa_unknown_package(setup, monkeypatch, capsys):
-    monkeypatch.setattr(builtins, 'open',
+    monkeypatch.setattr(Path, 'open',
                         testutil.fake_mapped({'test.toml': io.BytesIO(TOML1)}))
     r = gepare.main(['gepare', '-j', '-p', 'a', '-p', 'xyzzy', 'test.toml'])
     assert r == 0
     oe = capsys.readouterr()
     assert 'xyzzy' in oe.err
     j = json.loads(oe.out)
-    assert set(j['package'].keys()) == set(('a'))
+    assert set(j['package'].keys()) == set('a')
 
 def test_gepa_list(setup, monkeypatch, capsys):
     one = testutil.stringio()
@@ -265,12 +265,12 @@ def test_gepa_list(setup, monkeypatch, capsys):
         'one.txt': one,
         'two.txt': two,
     })
-    fake_exists = testutil.fake_mapped({'.': True}, False)
-    monkeypatch.setattr(builtins, 'open', fake_open)
+    fake_exists = testutil.fake_mapped({'.': True}, default=False)
+    monkeypatch.setattr(Path, 'open', fake_open)
     monkeypatch.setattr(Path, 'exists', fake_exists)
     r = gepare.main(['gepare', '-l', 'test.toml'])
     assert r == 0
-    assert set(opened) == set(('test.toml', 'one.txt', 'two.txt'))
+    assert set(opened) == {'test.toml', 'one.txt', 'two.txt'}
     oe = capsys.readouterr()
     assert 'Missing file for list type ‘test’' in oe.err
     assert one.getvalue() == ('enable("gepare", 3)\n'
@@ -282,14 +282,14 @@ def test_gepa_list_select(setup, monkeypatch, capsys):
     one = testutil.stringio()
     two = testutil.stringio()
     monkeypatch.setattr(
-        builtins, 'open',
+        Path, 'open',
         testutil.fake_mapped({
             'test.toml': io.BytesIO(TOML1),
             'one.txt': one,
             'two.txt': two,
         }))
     monkeypatch.setattr(Path, 'exists', testutil.fake_mapped({'.': True},
-                                                             False))
+                                                             default=False))
     r = gepare.main(['gepare', '-L', 'two', 'test.toml'])
     assert r == 0
     assert capsys.readouterr().err == ''
@@ -298,7 +298,7 @@ def test_gepa_list_select(setup, monkeypatch, capsys):
 
 def test_gepa_list_backup_exists(setup, monkeypatch):
     monkeypatch.setattr(
-        builtins, 'open',
+        Path, 'open',
         testutil.fake_mapped({
             'test.toml': io.BytesIO(TOML1),
             'two.txt': testutil.stringio(),
@@ -308,7 +308,7 @@ def test_gepa_list_backup_exists(setup, monkeypatch):
             '.': True,
             'two.bak': True,
             'two.txt': True,
-        }, False)
+        }, default=False)
     fake_unlink, unlinked = testutil.make_none()
     fake_rename, renamed = testutil.make_none()
     monkeypatch.setattr(Path, 'exists', fake_exists)
@@ -322,7 +322,7 @@ def test_gepa_list_backup_exists(setup, monkeypatch):
 
 def test_gepa_list_backup_new(setup, monkeypatch):
     monkeypatch.setattr(
-        builtins, 'open',
+        Path, 'open',
         testutil.fake_mapped({
             'test.toml': io.BytesIO(TOML1),
             'two.txt': testutil.stringio(),
@@ -331,7 +331,7 @@ def test_gepa_list_backup_new(setup, monkeypatch):
         {
             '.': True,
             'two.txt': True,
-        }, False)
+        }, default=False)
     fake_unlink, unlinked = testutil.make_none()
     fake_rename, renamed = testutil.make_none()
     monkeypatch.setattr(Path, 'exists', fake_exists)
@@ -344,7 +344,7 @@ def test_gepa_list_backup_new(setup, monkeypatch):
     assert str(renamed[0][1]) == 'two.bak'
 
 def test_gepa_list_bootstrap(setup, monkeypatch, capsys):
-    monkeypatch.setattr(builtins, 'open',
+    monkeypatch.setattr(Path, 'open',
                         testutil.fake_mapped({'test.toml': io.BytesIO(TOML1)}))
     r = gepare.main(['gepare', '-b', 'test.toml'])
     assert r == 0
@@ -365,7 +365,7 @@ def test_gepa_list_bootstrap(setup, monkeypatch, capsys):
         'ln -s "/etc/passwd" "/home/test/.local/share/passwd"\n')
 
 def test_gepa_list_bootstrap_all(setup, monkeypatch, capsys):
-    monkeypatch.setattr(builtins, 'open',
+    monkeypatch.setattr(Path, 'open',
                         testutil.fake_mapped({'test.toml': io.BytesIO(TOML1)}))
     r = gepare.main(['gepare', '-a', '-b', 'test.toml'])
     assert r == 0

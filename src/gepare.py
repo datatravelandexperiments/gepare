@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # SPDX-License-Identifier: MIT
-"""Package loader.
+"""
+Package loader.
 
 This is self-contained to simplify bootstrapping.
 """
@@ -16,33 +17,41 @@ import tomllib
 
 from abc import ABC, abstractmethod
 from collections import ChainMap
-from collections.abc import (Iterable, Mapping, MutableMapping, MutableSequence,
-                             MutableSet, Set, Sequence)
+from collections.abc import (
+    Iterable,
+    Mapping,
+    MutableMapping,
+    MutableSequence,
+    MutableSet,
+    Sequence,
+    Set,
+)
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Self, Type, TypeVar
+from typing import Any, Self, TypeVar
 
 T = TypeVar('T')
 
 SELF = 'gepare'
 
-def error(s):
+def error(s: str) -> None:
     print(f'{SELF}: {s}', file=sys.stderr)
 
 class Expander:
     """Get from a mapping with lazy recursive format string expansion."""
 
-    def __init__(self, mapping: Mapping):
+    def __init__(self, mapping: Mapping) -> None:
         self.scope = mapping
 
-    def __getitem__(self, key: str):
+    def __getitem__(self, key: str) -> str:
         value = self.scope[key]
         return self.expand(value) if isinstance(value, str) else value
 
-    def __contains__(self, key: str):
+    def __contains__(self, key: str) -> bool:
         return key in self.scope
 
-    def get(self, key: str, default=None):
+    def get(self, key: str, default: Any | None = None) -> str | Any | None:
         try:
             return self[key]
         except KeyError:
@@ -51,7 +60,9 @@ class Expander:
     def expand(self, s: str) -> str:
         return s.format_map(self)
 
-def ndget(d: Mapping[T, Any], keys: Iterable[T], default: Any = None) -> Any:
+def ndget(d: Mapping[T, Any],
+          keys: Iterable[T],
+          default: Any | None = None) -> Any | None:
     """Get from nested dictionaries."""
     t: Any = d
     try:
@@ -59,11 +70,11 @@ def ndget(d: Mapping[T, Any], keys: Iterable[T], default: Any = None) -> Any:
             if k not in t:
                 return default
             t = t[k]
-        return t
     except (KeyError, TypeError):
         return default
+    return t
 
-def ndupdate(d: MutableMapping, s: Mapping):
+def ndupdate(d: MutableMapping, s: Mapping) -> MutableMapping:
     """Update nested dictionaries."""
     for k, v in s.items():
         if k not in d:
@@ -84,7 +95,7 @@ def ndupdate(d: MutableMapping, s: Mapping):
         raise TypeError(k, d[k], v)
     return d
 
-def shell_escape(s: str, interpolatable: bool = True) -> str:
+def shell_escape(s: str, *, interpolatable: bool = True) -> str:
     if not interpolatable:
         return shlex.quote(s)
     r = ['"']
@@ -100,8 +111,9 @@ def toml_escape(s: str) -> str:
     for c in s:
         a = ord(c)
         if a == 34 or a == 92 or a < 32:
-            c = f'\\u{a:04X}'
-        r.append(c)
+            r.append(f'\\u{a:04X}')
+        else:
+            r.append(c)
     return ''.join(r)
 
 def xdg_dir(name: str, default_dir: str) -> Path:
@@ -117,23 +129,25 @@ def xdg_dir(name: str, default_dir: str) -> Path:
     return default
 
 class OriginStatus(Enum):
-    # TODO
+    """State of local version."""
+
     UNCHANGED = 0
     ERROR = 1
     UNKNOWN = 2
-    UPGRADABLE = 3
+    UPGRADABLE = 3  # Not implemented yet.
     DIRTY = 4
 
 class Origin(ABC):
     """Base class for package origin methods."""
-    subclass: dict[str, Type[Self]] = {}
 
-    def __init__(self, name: str, remote: str | Path, local: Path):
+    subclass: dict[str, type[Self]] = {}
+
+    def __init__(self, name: str, remote: str | Path, local: Path) -> None:
         self.name = name
         self.remote = remote
         self.local = local
 
-    def __init_subclass__(cls, name: str):
+    def __init_subclass__(cls, name: str) -> None:
         cls.subclass[name] = cls
 
     def refresh(self) -> bool:
@@ -194,13 +208,13 @@ class Origin(ABC):
         pass
 
     @classmethod
-    def vcs_by_name(cls, name: str):
+    def vcs_by_name(cls, name: str) -> type['Origin']:
         return cls.subclass[name]
 
     def _runp(self, command: Sequence[str],
               **kwargs) -> subprocess.CompletedProcess:
         return subprocess.run(
-            command, check=True, text=True, capture_output=True, **kwargs)
+            command, check=False, text=True, capture_output=True, **kwargs)
 
     def _run(self, command: Sequence[str], **kwargs) -> bool:
         p = self._runp(command, **kwargs)
@@ -221,7 +235,7 @@ class GitOrigin(Origin, name='git'):
         if not self.local.joinpath('.git').is_dir():
             error(f'{self.name}: {self.local} is not a Git repository.')
             return False
-        # TODO: check that the primary remote matches `self.src`.
+        # TODO: check that the upstream matches `self.src`.
         return True
 
     def _bootstrap(self) -> bool:
@@ -239,8 +253,12 @@ class GitOrigin(Origin, name='git'):
         return self._run(['git', 'pull', '--rebase'], cwd=self.local)
 
     def _status(self) -> OriginStatus:
-        # TODO return status
-        self._run(['git', 'status', '--short'], cwd=self.local)
+        p = self._runp(['git', 'status', '--porcelain=2'], cwd=self.local)
+        if p.returncode:
+            return OriginStatus.ERROR
+        if p.stdout:
+            return OriginStatus.DIRTY
+        # TODO check remote: separate local status from upgradability?
         return OriginStatus.UNKNOWN
 
 class MercurialOrigin(Origin, name='hg'):
@@ -263,13 +281,13 @@ class MercurialOrigin(Origin, name='hg'):
         print('fi')
         return True
 
-    def _clone(self):
+    def _clone(self) -> bool:
         return self._run(['hg', 'clone', str(self.remote), str(self.local)])
 
-    def _update(self):
+    def _update(self) -> bool:
         return self._run(['hg', 'pull', '-u'], cwd=self.local)
 
-    def _status(self):
+    def _status(self) -> OriginStatus:
         # TODO return status
         self._run(['hg', 'status'], cwd=self.local)
         return OriginStatus.UNKNOWN
@@ -277,7 +295,7 @@ class MercurialOrigin(Origin, name='hg'):
 class SymlinkOrigin(Origin, name='ln'):
     """A package symbolically linked to a master local directory."""
 
-    def __init__(self, name: str, remote: str | Path, local: Path):
+    def __init__(self, name: str, remote: str | Path, local: Path) -> None:
         super().__init__(name, remote, local)
         self.src: Path = Path(remote)
 
@@ -298,34 +316,36 @@ class SymlinkOrigin(Origin, name='ln'):
               f' ln -s {shell_escape(str(self.remote))} {local}')
         return True
 
-    def _clone(self):
+    def _clone(self) -> bool:
         self.src.symlink_to(self.local)
 
-    def _update(self):
+    def _update(self) -> bool:
         pass
 
     def _status(self) -> OriginStatus:
         return OriginStatus.UNCHANGED
 
+@dataclass
 class Package:
+    """Package information."""
 
-    def __init__(self, name: str, origin: Origin, info: Expander):
-        self.name = name
-        self.origin = origin
-        self.info = info
+    name: str
+    origin: Origin
+    info: Expander
 
 def read_toml(files: Iterable) -> dict[str, Any]:
     data: dict[str, Any] = {}
     for file in files:
-        if isinstance(file, (str, Path)):
-            with open(file, 'rb') as f:
+        if isinstance(file, str | Path):
+            with Path(file).open('rb') as f:
                 a = tomllib.load(f)
         else:
             a = tomllib.load(file)
         ndupdate(data, a)
     return data
 
-def read_inputs(files: Iterable):
+def read_inputs(
+        files: Iterable) -> tuple[dict[str, Package], ChainMap, dict[str, Any]]:
     """Given filenames, read them all."""
     config = read_toml(files)
 
@@ -352,7 +372,7 @@ def read_inputs(files: Iterable):
         info = Expander(cm)
 
         load = info.get('load', True)
-        if isinstance(load, (bool, list)):
+        if isinstance(load, bool | list):
             pass
         elif isinstance(load, str):
             load = [load]
@@ -395,14 +415,18 @@ def read_inputs(files: Iterable):
 def build_output(packages: Mapping[str, Package], ginfo: Expander,
                  config: dict[str, Any]) -> dict[str, Any]:
     output: dict[str, Any] = {}
-    gkeys = (['CONFIG_HOME', 'DATA_HOME', 'STATE_HOME', 'CACHE_HOME']
-             + ndget(config, ['output', 'global', 'keys'], []))
+    gkeys = ([
+        'CONFIG_HOME', 'DATA_HOME', 'STATE_HOME', 'CACHE_HOME',
+        *ndget(config, ['output', 'global', 'keys'], []),
+    ])
     for k in gkeys:
         output[k] = ginfo.get(k)
     for k, template in ndget(config, ['output', 'global', 'items'], {}).items():
         output[k] = template.format_map(ginfo)
-    pkeys = (['name', 'src', 'dst', 'vcs', 'load']
-             + ndget(config, ['output', 'package', 'keys'], []))
+    pkeys = ([
+        'name', 'src', 'dst', 'vcs', 'load',
+        *ndget(config, ['output', 'package', 'keys'], []),
+    ])
     pitems = ndget(config, ['output', 'package', 'items'], {})
     output['package'] = {}
     for key, package in packages.items():
@@ -419,8 +443,8 @@ def build_list(variant: str, packages: Mapping[str, Package], ginfo: Expander,
     out: list[str] = []
     for k in ndget(config, ['list', variant, 'global', 'keys'], []):
         out.append(str(ginfo.get(k)))
-    for k, template in ndget(config, ['list', variant, 'global', 'items'],
-                             {}).items():
+    for template in ndget(config, ['list', variant, 'global', 'items'],
+                          {}).values():
         out.append(template.format_map(ginfo))
     for package in packages.values():
         load = package.info.get('load')
@@ -429,17 +453,16 @@ def build_list(variant: str, packages: Mapping[str, Package], ginfo: Expander,
         if load:
             for k in ndget(config, ['list', variant, 'package', 'keys'], []):
                 out.append(str(package.info.get(k)))
-            for k, template in ndget(config,
-                                     ['list', variant, 'package', 'items'],
-                                     {}).items():
+            for template in ndget(config, ['list', variant, 'package', 'items'],
+                                  {}).values():
                 out.append(template.format_map(package.info))
     out.append('')
     return '\n'.join(out)
 
-def main(argv: Sequence[str] | None = None):
+def main(argv: Sequence[str] | None = None) -> int:
     if argv is None:
         argv = sys.argv  # pragma: no cover
-    global SELF
+    global SELF  # noqa: global-statement
     SELF = Path(argv[0]).stem
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -520,7 +543,7 @@ def main(argv: Sequence[str] | None = None):
                 error(f'{key}: not a configured package.')
         packages = selected
 
-    for key, package in packages.items():
+    for package in packages.values():
         if args.all or package.info.get('load', True):
             if args.bootstrap:
                 package.origin.bootstrap()
@@ -542,7 +565,7 @@ def main(argv: Sequence[str] | None = None):
         for v in variants:
             file = ndget(config, ['list', v, 'file'])
             if file is None:
-                error(f"Missing file for list type ‘{v}’")
+                error(f'Missing file for list type ‘{v}’')
                 continue
             filename = Path(ginfo.expand(file))
             if not filename.parent.exists():
@@ -552,10 +575,10 @@ def main(argv: Sequence[str] | None = None):
                 if b.exists():
                     b.unlink()
                 filename.rename(b)
-            with open(filename, 'w', encoding='utf-8') as f:
+            with Path(filename).open('w', encoding='utf-8') as f:
                 f.write(build_list(v, packages, ginfo, config))
 
     return 0
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     sys.exit(main(sys.argv))  # pragma: no cover

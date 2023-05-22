@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+"""Test nested dictionaries."""
 
 import pytest
 
@@ -12,8 +13,8 @@ D0 = {
             'v2': 2,
         },
         'l1': [1, 2, 3],
-        's1': set((10, 11, 12)),
-    }
+        's1': {10, 11, 12},
+    },
 }
 
 D1 = {
@@ -23,9 +24,9 @@ D1 = {
             'v3': 3,
         },
         'l1': [4, 5],
-        's1': set((13, 14)),
+        's1': {13, 14},
         'v1': 100,
-    }
+    },
 }
 
 def test_ndget_top():
